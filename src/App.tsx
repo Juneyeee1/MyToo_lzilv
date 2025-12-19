@@ -79,7 +79,6 @@ function App() {
               data={data}
               setData={setData}
               selectedDate={selectedDate}
-              setSelectedDate={setSelectedDate}
             />
           </TabsContent>
 

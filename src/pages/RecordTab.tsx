@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Settings, GripVertical, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ function SelectWithCustom({
   onValueChange,
   options,
 }: {
-  value: string;
+  value: string | undefined;
   onValueChange: (value: string) => void;
   options: Category[];
 }) {
@@ -88,7 +88,7 @@ function SelectWithCustom({
   return (
     <div className="space-y-2 w-full">
       <div className="flex gap-2 w-full">
-        <Select value={value || ""} onValueChange={onValueChange} className="flex-1 min-w-0 w-full">
+        <Select value={value ?? ""} onValueChange={onValueChange} className="flex-1 min-w-0 w-full">
           <SelectTrigger className="rounded-2xl w-full">
             <SelectValue placeholder="选择分类" />
           </SelectTrigger>
@@ -241,7 +241,6 @@ interface RecordTabProps {
   data: TrackerData;
   setData: React.Dispatch<React.SetStateAction<TrackerData>>;
   selectedDate: string;
-  setSelectedDate: (date: string) => void;
 }
 
 export function RecordTab({
