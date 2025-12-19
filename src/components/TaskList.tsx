@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { X, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PRIMARY_CATEGORIES, SECONDARY_CATEGORIES } from "@/constants/categories";
+import { SECONDARY_CATEGORIES } from "@/constants/categories";
 import { MOODS } from "@/constants/moods";
 import type { Task } from "@/types";
 import { sumHours, fmtHours } from "@/utils/helpers";

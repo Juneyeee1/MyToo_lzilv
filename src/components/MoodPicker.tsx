@@ -1,4 +1,3 @@
-import React from "react";
 import { MOODS } from "@/constants/moods";
 
 interface MoodPickerProps {

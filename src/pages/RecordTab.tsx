@@ -17,14 +17,14 @@ import { StatPill } from "@/components/StatPill";
 import { MoodPicker } from "@/components/MoodPicker";
 import { TaskList } from "@/components/TaskList";
 import { TodoList } from "@/components/TodoList";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog } from "@/components/ui/dialog";
 import { formatDate, addDays } from "@/utils/date";
 import { clamp, sumHours, fmtHours, uid } from "@/utils/helpers";
 import type { Habit } from "@/types";
 import { PRIMARY_CATEGORIES, SECONDARY_CATEGORIES } from "@/constants/categories";
 import { MOODS } from "@/constants/moods";
-import type { TrackerData, Task, Category, TodoItem } from "@/types";
+import type { TrackerData, Category, TodoItem, HabitStatus } from "@/types";
 
 // 支持自定义输入的Select组件
 function SelectWithCustom({
@@ -88,7 +88,7 @@ function SelectWithCustom({
   return (
     <div className="space-y-2 w-full">
       <div className="flex gap-2 w-full">
-        <Select value={value || undefined} onValueChange={onValueChange} className="flex-1 min-w-0 w-full">
+        <Select value={value || ""} onValueChange={onValueChange} className="flex-1 min-w-0 w-full">
           <SelectTrigger className="rounded-2xl w-full">
             <SelectValue placeholder="选择分类" />
           </SelectTrigger>
@@ -248,7 +248,6 @@ export function RecordTab({
   data,
   setData,
   selectedDate,
-  setSelectedDate,
 }: RecordTabProps) {
   const [baseDate, setBaseDate] = useState(() => new Date());
   const [editingMoodNote, setEditingMoodNote] = useState(false);
