@@ -1,0 +1,640 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from "recharts";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  Circle,
+  Plus,
+  TrendingUp,
+  Smile,
+  Meh,
+  Frown,
+  Sparkles,
+} from "lucide-react";
+
+/**
+ * Demo 目标
+ * - Tab1 记录：近期习惯（可点选完成）、每日事项记录 + 分类统计（卡片）、心情记录
+ * - Tab2 长期追踪：平均花费时间、每日总时长折线图、心情统计
+ *
+ * 说明：这是前端交互 Demo（本地 localStorage 持久化）。
+ */
+
+// ---------- utils ----------
+const pad2 = (n) => String(n).padStart(2, "0");
+const formatDate = (d) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const formatMMDD = (d) => `${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+const addDays = (d, days) => {
+  const nd = new Date(d);
+  nd.setDate(nd.getDate() + days);
+  return nd;
+};
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+const STORAGE_KEY = "habit-tracker-demo-v1";
+
+const PRIMARY_CATEGORIES = [
+  { key: "external", label: "外界" },
+  { key: "study", label: "短期学习" },
+  { key: "health", label: "健康" },
+  { key: "other", label: "其他" },
+];
+
+const SECONDARY_CATEGORIES = [
+  { key: "spontaneous", label: "自发" },
+  { key: "obligation", label: "义务" },
+  { key: "work", label: "工作" },
+  { key: "family", label: "家庭" },
+];
+
+const MOODS = [
+  {
+    key: "great",
+    label: "很好",
+    icon: Sparkles,
+    hint: "能量充足",
+  },
+  { key: "good", label: "不错", icon: Smile, hint: "状态在线" },
+  { key: "ok", label: "一般", icon: Meh, hint: "还可以" },
+  { key: "bad", label: "糟糕", icon: Frown, hint: "需要休息" },
+];
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function uid() {
+  return Math.random().toString(16).slice(2) + Date.now().toString(16);
+}
+
+function buildDefaultData() {
+  const today = new Date();
+  const t = formatDate(today);
+  const yesterday = formatDate(addDays(today, -1));
+  const twoDaysAgo = formatDate(addDays(today, -2));
+
+  return {
+    habitChecks: {
+      [twoDaysAgo]: true,
+      [yesterday]: false,
+      [t]: true,
+    },
+    tasksByDate: {
+      [twoDaysAgo]: [
+        {
+          id: uid(),
+          title: "跑步 5km",
+          hours: 1,
+          primary: "health",
+          secondary: "spontaneous",
+          details: "节奏跑 + 拉伸",
+        },
+        {
+          id: uid(),
+          title: "整理简历",
+          hours: 1.5,
+          primary: "study",
+          secondary: "obligation",
+          details: "补充项目描述 + 作品链接",
+        },
+      ],
+      [yesterday]: [
+        {
+          id: uid(),
+          title: "陪家人吃饭",
+          hours: 2,
+          primary: "external",
+          secondary: "family",
+          details: "聊天放松",
+        },
+      ],
+      [t]: [
+        {
+          id: uid(),
+          title: "阅读：前端性能优化",
+          hours: 1.2,
+          primary: "study",
+          secondary: "spontaneous",
+          details: "记录 5 条实践要点",
+        },
+        {
+          id: uid(),
+          title: "拉伸 + 早睡",
+          hours: 0.6,
+          primary: "health",
+          secondary: "spontaneous",
+          details: "肩颈 + 髋部",
+        },
+      ],
+    },
+    moodByDate: {
+      [twoDaysAgo]: { mood: "good", note: "完成了很多小目标" },
+      [yesterday]: { mood: "ok", note: "有点累，但还行" },
+      [t]: { mood: "great", note: "专注度很高" },
+    },
+  };
+}
+
+// ---------- UI pieces ----------
+function StatPill({ label, value, sub }) {
+  return (
+    <div className="rounded-2xl border bg-white/60 p-4 shadow-sm">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="mt-1 flex items-end gap-2">
+        <div className="text-2xl font-semibold tracking-tight">{value}</div>
+        {sub ? <div className="pb-1 text-xs text-muted-foreground">{sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function WeekStrip({
+  baseDate,
+  selected,
+  onSelect,
+  habitChecks,
+  onToggleHabit,
+  onPrev,
+  onNext,
+}) {
+  const start = useMemo(() => addDays(baseDate, -3), [baseDate]);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start]);
+
+  return (
+    <Card className="rounded-2xl">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" />
+            <CardTitle className="text-base">近期习惯</CardTitle>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" className="rounded-xl" onClick={onPrev}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="icon" className="rounded-xl" onClick={onNext}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button variant="secondary" className="rounded-xl" onClick={() => onSelect(formatDate(new Date()))}>
+              回到今天
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1">
+          {days.map((d) => {
+            const key = formatDate(d);
+            const isSel = key === selected;
+            const done = !!habitChecks[key];
+            return (
+              <button
+                key={key}
+                onClick={() => onSelect(key)}
+                className={`min-w-[72px] rounded-2xl border p-3 text-left transition hover:shadow-sm ${
+                  isSel ? "bg-black text-white" : "bg-white"
+                }`}
+              >
+                <div className={`text-xs ${isSel ? "text-white/80" : "text-muted-foreground"}`}>
+                  {formatMMDD(d)}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <div className={`text-sm font-medium ${isSel ? "text-white" : "text-foreground"}`}>
+                    {d.toLocaleDateString(undefined, { weekday: "short" })}
+                  </div>
+                  <div
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleHabit(key);
+                    }}
+                    className="rounded-full"
+                    title="点一下切换完成状态"
+                  >
+                    {done ? (
+                      <CheckCircle2 className={`h-5 w-5 ${isSel ? "text-white" : "text-foreground"}`} />
+                    ) : (
+                      <Circle className={`h-5 w-5 ${isSel ? "text-white/80" : "text-muted-foreground"}`} />
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <div>
+            点击日期切换到那一天；点击圆圈切换“今天是否有做”。
+          </div>
+          <div className="rounded-xl border bg-white px-3 py-1">
+            在线查看：历史习惯记录（Demo）
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MoodPicker({ value, onChange }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      {MOODS.map((m) => {
+        const Icon = m.icon;
+        const active = value === m.key;
+        return (
+          <button
+            key={m.key}
+            onClick={() => onChange(m.key)}
+            className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition hover:shadow-sm ${
+              active ? "bg-black text-white" : "bg-white"
+            }`}
+          >
+            <div className={`rounded-xl border p-2 ${active ? "border-white/20" : ""}`}>
+              <Icon className={`h-5 w-5 ${active ? "text-white" : ""}`} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{m.label}</div>
+              <div className={`truncate text-xs ${active ? "text-white/80" : "text-muted-foreground"}`}>
+                {m.hint}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function groupTasksByPrimary(tasks) {
+  const map = new Map();
+  for (const p of PRIMARY_CATEGORIES) map.set(p.key, []);
+  for (const t of tasks) {
+    if (!map.has(t.primary)) map.set(t.primary, []);
+    map.get(t.primary).push(t);
+  }
+  return map;
+}
+
+function sumHours(tasks) {
+  return tasks.reduce((acc, t) => acc + (Number(t.hours) || 0), 0);
+}
+
+function fmtHours(n) {
+  const v = Math.round((Number(n) || 0) * 10) / 10;
+  return v;
+}
+
+export default function App() {
+  const [tab, setTab] = useState("record");
+
+  const [data, setData] = useState(() => {
+    const loaded = loadState();
+    return loaded ?? buildDefaultData();
+  });
+
+  const [baseDate, setBaseDate] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => formatDate(new Date()));
+
+  const tasksToday = data.tasksByDate?.[selectedDate] ?? [];
+  const moodToday = data.moodByDate?.[selectedDate]?.mood ?? "";
+  const moodNoteToday = data.moodByDate?.[selectedDate]?.note ?? "";
+
+  // task form
+  const [title, setTitle] = useState("");
+  const [hours, setHours] = useState("1");
+  const [primary, setPrimary] = useState(PRIMARY_CATEGORIES[0].key);
+  const [secondary, setSecondary] = useState(SECONDARY_CATEGORIES[0].key);
+  const [details, setDetails] = useState("");
+
+  useEffect(() => {
+    saveState(data);
+  }, [data]);
+
+  // when selecting date, keep baseDate close
+  useEffect(() => {
+    const d = new Date(selectedDate);
+    if (!Number.isNaN(d.valueOf())) setBaseDate(d);
+  }, [selectedDate]);
+
+  const toggleHabit = (dateKey) => {
+    setData((prev) => {
+      const next = { ...prev, habitChecks: { ...(prev.habitChecks || {}) } };
+      next.habitChecks[dateKey] = !next.habitChecks[dateKey];
+      return next;
+    });
+  };
+
+  const addTask = () => {
+    const h = clamp(Number(hours), 0, 24);
+    if (!title.trim()) return;
+
+    setData((prev) => {
+      const next = { ...prev, tasksByDate: { ...(prev.tasksByDate || {}) } };
+      const list = [...(next.tasksByDate[selectedDate] || [])];
+      list.unshift({
+        id: uid(),
+        title: title.trim(),
+        hours: h,
+        primary,
+        secondary,
+        details: details.trim(),
+      });
+      next.tasksByDate[selectedDate] = list;
+      return next;
+    });
+
+    setTitle("");
+    setDetails("");
+    setHours("1");
+  };
+
+  const removeTask = (id) => {
+    setData((prev) => {
+      const next = { ...prev, tasksByDate: { ...(prev.tasksByDate || {}) } };
+      next.tasksByDate[selectedDate] = (next.tasksByDate[selectedDate] || []).filter((t) => t.id !== id);
+      return next;
+    });
+  };
+
+  const saveMood = (mood, note) => {
+    setData((prev) => {
+      const next = { ...prev, moodByDate: { ...(prev.moodByDate || {}) } };
+      next.moodByDate[selectedDate] = { mood, note };
+      return next;
+    });
+  };
+
+  // ---------- analytics ----------
+  const lastNDays = (n) => {
+    const end = new Date();
+    const start = addDays(end, -(n - 1));
+    const days = [];
+    for (let i = 0; i < n; i++) days.push(addDays(start, i));
+    return days;
+  };
+
+  const series30 = useMemo(() => {
+    const days = lastNDays(30);
+    return days.map((d) => {
+      const k = formatDate(d);
+      const tasks = data.tasksByDate?.[k] ?? [];
+      const total = sumHours(tasks);
+      return {
+        date: k.slice(5), // MM-DD
+        dateKey: k,
+        total: Math.round(total * 10) / 10,
+      };
+    });
+  }, [data.tasksByDate]);
+
+  const avg7 = useMemo(() => {
+    const days = lastNDays(7).map((d) => formatDate(d));
+    const totals = days.map((k) => sumHours(data.tasksByDate?.[k] ?? []));
+    const v = totals.reduce((a, b) => a + b, 0) / (totals.length || 1);
+    return Math.round(v * 10) / 10;
+  }, [data.tasksByDate]);
+
+  const avg30 = useMemo(() => {
+    const totals = series30.map((x) => x.total);
+    const v = totals.reduce((a, b) => a + b, 0) / (totals.length || 1);
+    return Math.round(v * 10) / 10;
+  }, [series30]);
+
+  const moodStats = useMemo(() => {
+    const counter = Object.fromEntries(MOODS.map((m) => [m.key, 0]));
+    for (const k of Object.keys(data.moodByDate || {})) {
+      const m = data.moodByDate[k]?.mood;
+      if (m && counter[m] !== undefined) counter[m] += 1;
+    }
+    return MOODS.map((m) => ({ mood: m.label, key: m.key, count: counter[m.key] }));
+  }, [data.moodByDate]);
+
+  const todaysTotal = useMemo(() => fmtHours(sumHours(tasksToday)), [tasksToday]);
+  const habitDone = !!data.habitChecks?.[selectedDate];
+
+  const tasksGrouped = useMemo(() => groupTasksByPrimary(tasksToday), [tasksToday]);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-zinc-50 to-white p-4 md:p-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-2xl font-semibold tracking-tight">习惯与时间记录</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              Demo：按草图实现两页（记录 / 长期追踪）。数据只保存在本地浏览器。
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="rounded-2xl border bg-white px-4 py-2">
+              <div className="text-xs text-muted-foreground">当前选择日期</div>
+              <div className="text-sm font-medium">{selectedDate}</div>
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-2xl"
+              onClick={() => {
+                localStorage.removeItem(STORAGE_KEY);
+                setData(buildDefaultData());
+                setSelectedDate(formatDate(new Date()));
+              }}
+            >
+              重置 Demo 数据
+            </Button>
+          </div>
+        </div>
+
+        <Tabs value={tab} onValueChange={setTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 rounded-2xl">
+            <TabsTrigger value="record" className="rounded-2xl">记录</TabsTrigger>
+            <TabsTrigger value="analytics" className="rounded-2xl">长期追踪</TabsTrigger>
+          </TabsList>
+
+          {/* ---------- Tab 1: 记录 ---------- */}
+          <TabsContent value="record" className="mt-6 space-y-6">
+            <WeekStrip
+              baseDate={baseDate}
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              habitChecks={data.habitChecks || {}}
+              onToggleHabit={toggleHabit}
+              onPrev={() => setBaseDate((d) => addDays(d, -7))}
+              onNext={() => setBaseDate((d) => addDays(d, 7))}
+            />
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <StatPill label="今日总耗时" value={`${todaysTotal} h`} sub="按事项累计" />
+              <StatPill
+                label="今日习惯完成"
+                value={habitDone ? "已完成" : "未完成"}
+                sub="点击上方圆圈切换"
+              />
+              <StatPill
+                label="今日心情"
+                value={
+                  moodToday
+                    ? MOODS.find((m) => m.key === moodToday)?.label ?? "已记录"
+                    : "未记录"
+                }
+                sub="支持备注"
+              />
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* left: add task */}
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base">新增事项（今日记录）</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-2">
+                    <Label>事项</Label>
+                    <Input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="比如：跑步 / 复盘 / 学习 / 家庭活动..."
+                      className="rounded-2xl"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>完成时间（小时）</Label>
+                      <Input
+                        value={hours}
+                        onChange={(e) => setHours(e.target.value)}
+                        type="number"
+                        min={0}
+                        max={24}
+                        step={0.1}
+                        className="rounded-2xl"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>类型 1</Label>
+                      <Select value={primary} onValueChange={setPrimary}>
+                        <SelectTrigger className="rounded-2xl">
+                          <SelectValue placeholder="选择类型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PRIMARY_CATEGORIES.map((c) => (
+                            <SelectItem key={c.key} value={c.key}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>类型 2</Label>
+                    <Select value={secondary} onValueChange={setSecondary}>
+                      <SelectTrigger className="rounded-2xl">
+                        <SelectValue placeholder="选择类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SECONDARY_CATEGORIES.map((c) => (
+                          <SelectItem key={c.key} value={c.key}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>备注（可选）</Label>
+                    <Textarea
+                      value={details}
+                      onChange={(e) => setDetails(e.target.value)}
+                      placeholder="展开后可查看更详细记录"
+                      className="min-h-[88px] rounded-2xl"
+                    />
+                  </div>
+
+                  <Button onClick={addTask} className="w-full rounded-2xl">
+                    <Plus className="mr-2 h-4 w-4" />
+                    添加到 {selectedDate}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* right: mood */}
+              <Card className="rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base">心情记录</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    先选择整体状态（可量表化），再补充一句话。
+                  </div>
+
+                  <MoodPicker value={moodToday} onChange={(m) => saveMood(m, moodNoteToday)} />
+
+                  <div className="grid gap-2">
+                    <Label>心情备注（可选）</Label>
+                    <Textarea
+                      value={moodNoteToday}
+                      onChange={(e) => saveMood(moodToday, e.target.value)}
+                      placeholder="比如：今天专注/焦虑/很松弛..."
+                      className="min-h-[110px] rounded-2xl"
+                    />
+                  </div>
+
+                  <div className="rounded-2xl border bg-white p-4 text-sm">
+                    <div className="font-medium">当前记录</div>
+                    <div className="mt-1 text-muted-foreground">
+                      {moodToday ? (
+                        <>
+                          心情：{MOODS.find((m) => m.key === moodToday)?.label}
